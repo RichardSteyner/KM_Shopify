@@ -1,0 +1,103 @@
+@isTest
+public class Shopify_Test {
+    
+    //private static ShopifyAPI_List__c authentication = ShopifyAPI_List__c.getOrgDefaults();
+    
+    static {
+        ShopifyAPI_List__c authenticationBiofit = new ShopifyAPI_List__c();
+        authenticationBiofit.Name = 'Biofit';
+        authenticationBiofit.API_Key__c = 'Biofit';
+        authenticationBiofit.Base_URL__c = 'test';
+        authenticationBiofit.Password__c = 'test';
+        insert authenticationBiofit;
+        
+        ShopifyAPI_List__c authenticationInnerG = new ShopifyAPI_List__c();
+        authenticationInnerG.Name = 'InnerG';
+        authenticationInnerG.API_Key__c = 'InnerG';
+        authenticationInnerG.Base_URL__c = 'test';
+        authenticationInnerG.Password__c = 'test';
+        insert authenticationInnerG;
+    }
+    
+    @isTest static void testCustomerBatch(){
+        Test.startTest();
+        Database.executeBatch(new ShopifyCustomerBatch('Biofit', true, 60), 100);
+        Test.stopTest();
+    }
+    
+    @isTest static void testProductBatch(){
+        //List<Product2> count = [select Id from Product2];
+        //System.debug(count.size());
+        List<Pricebook2> pbs = [SELECT Id FROM Pricebook2 WHERE IsStandard = true];
+        System.debug('1.- ' + pbs.size());
+        System.debug('2.- ' + Test.getStandardPricebookId());
+        Test.startTest();
+        Database.executeBatch(new ShopifyProductBatch('Biofit', true, 60), 100);
+        Test.stopTest();
+    }
+    
+    @isTest static void testOrderBatch01(){
+        Test.startTest();
+        Database.executeBatch(new ShopifyOrderBatch('Biofit', true, 60), 100);
+        Test.stopTest();
+    }
+    
+    @isTest static void testOrderBatch02(){
+        Test.startTest();
+        Database.executeBatch(new ShopifyProductBatch('Biofit', true, 60), 100);
+        Database.executeBatch(new ShopifyOrderBatch('Biofit', true, 60), 100);
+        Test.stopTest();
+    }
+    
+    @isTest static void testCheckoutBatch01(){
+        Test.startTest();
+        Database.executeBatch(new ShopifyCheckoutBatch('Biofit', true, 1), 100);
+        Test.stopTest();
+    }
+    
+    @isTest static void testCheckoutBatch02(){
+        Test.startTest();
+        Database.executeBatch(new ShopifyProductBatch('Biofit', true, 60), 100);
+        Database.executeBatch(new ShopifyCheckoutBatch('Biofit', true, 1), 100);
+        Test.stopTest();
+    }
+    
+    @isTest static void testCheckout(){
+        ShopifyCheckout sc = new ShopifyCheckout();
+        sc.token = 'test';
+        sc.cart_token = 'test';
+        sc.email = 'test';
+        sc.closed_at = '2020-04-29T11:32:54-07:00';
+        sc.getCloseDate();
+        sc.updated_at = '2020-04-29T11:32:54-07:00';
+        sc.total_line_items_price = '99.00';
+        ShopifyCheckout.Line_Item li = new ShopifyCheckout.Line_Item();
+        li.vendor = 'Test';
+        li.line_price = '99.00';
+        ShopifyCheckout.Tax_Line tl = new ShopifyCheckout.Tax_Line();
+        tl.title = 'Test';
+        tl.price = '99.00';
+        li.tax_lines = new List<ShopifyCheckout.Tax_Line>();
+        li.tax_lines.add(tl);
+        li.getTotalTax();
+    }
+    
+    @isTest static void testOrder(){
+        ShopifyOrder so = new ShopifyOrder();
+        so.token = 'test';
+        so.email = 'test';
+        so.closed_at = '2020-04-29T11:32:54-07:00';
+        so.getCloseDate();
+        ShopifyOrder.Line_Item li = new ShopifyOrder.Line_Item();
+        li.variant_title = 'Test';
+    }
+    
+    @isTest static void testScheduler(){
+        ShopifyGetSchedule scheduler= new ShopifyGetSchedule('Biofit', false, 60);
+        SchedulableContext sc;
+        Test.startTest();
+		scheduler.execute(sc);
+        Test.stopTest();
+    }
+
+}
