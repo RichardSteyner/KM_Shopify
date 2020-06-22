@@ -1,0 +1,118 @@
+global class ShopifyProductBatch implements Database.Batchable<ShopifyProduct>, Database.Stateful, Database.AllowsCallouts{
+    public String instance;
+    public Boolean isAll;
+    public Integer pageSize;
+    public Integer initPage;
+    public String filterAditional; //agregar la fecha minima de actualizacion
+    
+    global ShopifyProductBatch(String instance, Boolean isAll, Integer pageSize){
+        this(instance, isAll, pageSize, 1);
+    }
+    
+    global ShopifyProductBatch(String instance, Boolean isAll, Integer pageSize, Integer initPage){
+        this.instance = instance;
+        this.isAll = isAll;
+        this.pageSize = pageSize;
+        this.initPage = initPage;
+        filterAditional = (!isAll ? ('&updated_at_min=' + Datetime.now().addHours(-12).format('yyyy-MM-dd')) : '');
+    }
+    
+    global List<ShopifyProduct> start(Database.BatchableContext BC){
+        String jsonString = ShopifyConnection.getShopifyEntity(instance, 'products', 'limit=' + pageSize + '&page=' + initPage + filterAditional);
+        ProductParser jsonProducts = new ProductParser();
+       	jsonProducts = (ProductParser)json.deserialize(jsonString, ProductParser.class);
+        if(jsonProducts.products.size()>0) initPage++; else initPage = 0;
+        return jsonProducts.products;
+    }
+    
+    global void execute(Database.BatchableContext BC, List<ShopifyProduct> scope){
+        try{
+            Map<String, Product2> products = new Map<String, Product2>();
+            Map<String, PricebookEntry> pbesStandard = new Map<String, PricebookEntry>();
+            Map<String, PricebookEntry> pbes = new Map<String, PricebookEntry>();
+                       
+            List<Pricebook2> pbs = [SELECT Id, Name, IsStandard FROM Pricebook2 WHERE IsStandard = true or Name =: instance];
+            String standardBookId = null;
+            String instanceBookId = null;
+            if(Test.isRunningTest()) standardBookId = Test.getStandardPricebookId();
+            if(pbs.size()>0) {
+                for(Pricebook2 pri : pbs){
+                    if(pri.Name.equalsIgnoreCase(instance)) instanceBookId=pri.Id;
+                    else if(pri.IsStandard) standardBookId = pri.Id;
+                }
+            }
+            
+            for(ShopifyProduct item : scope){
+                System.debug(item.Title);
+                products.put(instance.touppercase() + '-' + item.id, new Product2(Name=item.Title, ShopifyID__c=instance.touppercase() + '-' + item.id, Product_Description__c=item.body_html, IsActive=true,
+                                                          Product_Type__c=item.product_type, Product_Tags__c=item.getTags(), Product_Image__c=item.getImage(), 
+                                                          Weight__c=item.getWeight(), Weight_Type__c=item.getWeightUnit(), 
+                                                          Inventory_Quantity__c=item.getInventoryQuantity(), Product_SKU__c=item.getSku(),
+                                                          Charge_tax_on_this_product__c=item.getTaxable(), Vendor__c=item.vendor, Shopify_Type__c=instance));
+                
+                if(standardBookId != null){
+                	pbesStandard.put('S-' + instance.touppercase() + '-' + item.id, new PricebookEntry(ShopifyID__c='S-' + instance.touppercase() + '-' + item.id, IsActive=true,
+                                                         Compare_at_Price__c=item.getComparePrice(), UnitPrice=item.getPrice(), 
+                                                         Pricebook2Id=standardBookId));
+                	if(instanceBookId!=null){
+                        pbes.put(instance.touppercase() + '-' + item.id, new PricebookEntry(ShopifyID__c=instance.touppercase() + '-' + item.id, IsActive=true,
+                                                         Compare_at_Price__c=item.getComparePrice(), UnitPrice=item.getPrice(), 
+                                                         Pricebook2Id=instanceBookId));
+                    }
+                }
+            }
+            //System.debug(products);
+            System.debug(pbes);
+            List<Database.UpsertResult> upsertResults;
+            
+            upsertResults = Database.upsert(products.values(), Product2.ShopifyID__c, false);
+            for(Database.UpsertResult upsertResult:upsertResults) {
+                if(!upsertResult.isSuccess()) {
+                    for(Database.Error upsertError : upsertResult.getErrors()) 
+                        System.debug('ShopifyProductBatch - Product Upsert Error: ' + upsertError.getMessage());
+                }
+            }
+            
+            for(Product2 p : products.values()){
+                if(p.Id!=null)
+                {
+                    if(pbesStandard.get('S-' + p.ShopifyID__c)!=null) { pbesStandard.get('S-' + p.ShopifyID__c).Product2Id=p.Id; }
+                    if(pbes.get(p.ShopifyID__c)!=null) { pbes.get(p.ShopifyID__c).Product2Id=p.Id; }
+                    //System.debug('Add: ' + acc.Name + '-' + acc.Id);
+                }
+                else{
+                    if(pbesStandard.get('S-' + p.ShopifyID__c)!=null) { pbesStandard.remove('S-' + p.ShopifyID__c); System.debug('SRemove: ' + p.Name);}
+                    if(pbes.get(p.ShopifyID__c)!=null){ pbes.remove(p.ShopifyID__c); System.debug('Remove: ' + p.Name);}
+                    
+                }
+            }
+            
+            upsertResults = Database.upsert(pbesStandard.values(), PricebookEntry.ShopifyID__c, false);
+            for(Database.UpsertResult upsertResult:upsertResults) {
+                if(!upsertResult.isSuccess()) {
+                    for(Database.Error upsertError : upsertResult.getErrors()) 
+                        System.debug('ShopifyProductBatch - PricebookEntry Standard Upsert Error: ' + upsertError.getMessage());
+                }
+            }
+            
+            upsertResults = Database.upsert(pbes.values(), PricebookEntry.ShopifyID__c, false);
+            for(Database.UpsertResult upsertResult:upsertResults) {
+                if(!upsertResult.isSuccess()) {
+                    for(Database.Error upsertError : upsertResult.getErrors()) 
+                        System.debug('ShopifyProductBatch - PricebookEntry Upsert Error: ' + upsertError.getMessage());
+                }
+            }
+        }catch(Exception e){
+            System.debug(e.getMessage());
+        }
+    }
+    
+    global void finish(Database.BatchableContext BC){
+        System.debug('Finsih ShopifyProductBatch: initPage->' + initPage);
+        if(!Test.isRunningTest()){
+            if(initPage>0) System.scheduleBatch(new ShopifyProductBatch(instance, isAll, pageSize, initPage), 'ShopifyProductBatch-' + initPage, 1, 100);
+            else Database.executeBatch(new ShopifyOrderBatch(instance, isAll, pageSize));
+        }
+    }
+    
+}
