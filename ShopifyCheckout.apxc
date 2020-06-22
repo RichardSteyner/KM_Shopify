@@ -1,0 +1,171 @@
+global class ShopifyCheckout {
+    
+    public Long id {get; set;}
+    public String token {get; set;}
+    public String cart_token {get; set;}
+    public String email {get; set;}
+    public String created_at {get; set;}
+    public String updated_at {get; set;}
+    public String landing_site {get; set;}
+    public String note {get; set;}
+    public Boolean taxes_included {get; set;}
+    public String closed_at {get; set;}
+    public String name {get; set;}
+    public String source_name {get; set;}
+    public List<Discount_Code> discount_codes {get; set;}
+    public String total_discounts {get; set;}
+    public String total_line_items_price {get; set;}
+    public String total_price {get; set;}
+    public String total_tax {get; set;}
+    public String subtotal_price {get; set;}
+    public Customer customer {get; set;}
+    public List<Line_Item> line_items {get; set;}
+    
+    public Date getCloseDate(){
+        if(closed_at!=null && closed_at!='')
+        {
+            try{
+                return Datetime.valueOfGmt(closed_at.replace('T', ' ')).date();
+            }catch(Exception e){
+                System.debug('Exception convert closed_at: ' +  e.getMessage());
+            }
+        }else if(created_at!=null && created_at!=''){
+            try{
+                return Datetime.valueOfGmt(created_at.replace('T', ' ')).date();
+            }catch(Exception e){
+                System.debug('Exception convert created_at: ' +  e.getMessage());
+            }
+        }
+            
+        return System.now().date();
+    }
+    
+    public Decimal getSubTotal(){
+            if(subtotal_price!=null && subtotal_price!=''){
+                try{
+                	return Decimal.valueOf(subtotal_price);
+                }catch(Exception e){
+                    System.debug('Exception: Order getSubTotal -> ' + e.getMessage());
+                }
+            }
+            return 0;
+    }
+    
+    public Decimal getTotalDiscounts(){
+            if(total_discounts!=null && total_discounts!=''){
+                try{
+                	return Decimal.valueOf(total_discounts);
+                }catch(Exception e){
+                    System.debug('Exception: Order getTotalDiscounts -> ' + e.getMessage());
+                }
+            }
+            return 0;
+    }
+    
+    public Decimal getTotalPrice(){
+            if(total_price!=null && total_price!=''){
+                try{
+                	return Decimal.valueOf(total_price);
+                }catch(Exception e){
+                    System.debug('Exception: Order getTotalPrice -> ' + e.getMessage());
+                }
+            }
+            return 0;
+    }
+    
+    public Decimal getTotalTax(){
+            if(total_tax!=null && total_tax!=''){
+                try{
+                	return Decimal.valueOf(total_tax);
+                }catch(Exception e){
+                    System.debug('Exception: Order getTotalTax -> ' + e.getMessage());
+                }
+            }
+            return 0;
+    }
+    
+    public Long getCustomerId(){
+        if(customer!=null)
+            return customer.id;
+        return null;
+    }
+    
+    public String getDiscount_Codes(){
+        if(discount_codes!=null){
+            String auxCodes = '';
+            for(Discount_Code dc : discount_codes){
+                auxCodes = auxCodes + (dc.code != null && String.isNotBlank(dc.code) ? ', ' + dc.code : '');
+            }
+            return auxCodes;
+        }
+        return '';
+    }
+    
+    class Discount_Code{
+        public String code {get; set;}
+    }
+    
+    public class Customer{
+        public Long id {get; set;}
+        public String email {get; set;}
+        public String first_name {get; set;}
+        public String last_name {get; set;}
+    }
+    
+    public class Line_Item{
+        public String key {get; set;}
+        /*public Boolean gift_card {get; set;}
+        public Long origin_location_id {get; set;}
+        public String presentment_title {get; set;}
+        public String presentment_variant_title {get; set;}*/
+        public Long product_id {get; set;}
+        public Integer quantity {get; set;}
+        public Boolean requires_shipping {get; set;}
+        public String sku {get; set;}
+        public List<Tax_Line> tax_lines {get; set;}
+        public Boolean taxable {get; set;}
+        public String title {get; set;}
+        public Long variant_id {get; set;}
+        public String vendor {get; set;}
+        public String compare_at_price {get; set;}
+        public String line_price {get; set;}
+        public String price {get; set;}
+        
+        public Decimal getTotalTax(){
+            Decimal sumTax = 0.0;
+            for(Tax_Line tl : tax_lines){
+                sumTax += tl.getPrice();
+            } 
+            return sumTax;
+        }
+        
+        public Decimal getUnitPrice(){
+            if(price!=null && price!=''){
+                try{
+                	return Decimal.valueOf(price);
+                }catch(Exception e){
+                    System.debug('Exception: Order getUnitPrice Line_Item -> ' + e.getMessage());
+                }
+            }
+            return 0;
+    	}
+    
+    }
+    
+    public class Tax_Line{
+        public String title {get; set;}
+        public String price {get; set;}
+        
+        public Decimal getPrice(){
+            if(price!=null && price!=''){
+                try{
+                	return Decimal.valueOf(price);
+                }catch(Exception e){
+                    System.debug('Exception: Order getPrice Tax Line -> ' + e.getMessage());
+                }
+            }
+            return 0;
+    	}
+    }
+
+}
