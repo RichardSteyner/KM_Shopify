@@ -1,0 +1,17 @@
+global class ShopifyGetSchedule implements Schedulable {
+    
+    String instance;
+    Boolean isAll;
+    Integer pageSize;
+    
+    public ShopifyGetSchedule(String instance, Boolean isAll, Integer pageSize){
+        this.instance = instance;
+        this.isAll = isAll;
+        this.pageSize = pageSize;
+    }
+    
+    global void execute(SchedulableContext ctx) {
+        Database.executeBatch(new ShopifyCustomerBatch(instance, isAll, pageSize), 100);
+    }
+
+}
